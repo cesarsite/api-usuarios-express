@@ -1,0 +1,179 @@
+Vou comentar e explicar cada parte do código para você, começando pelas classes e seguindo para as rotas e o servidor.
+
+1. UsuariosModels.js
+javascript
+Copiar
+Editar
+class UsuarioModel {
+
+    static lista = [
+        {
+            id: 1,
+            name: 'admin',
+            login: 'admin',
+            senha: '123123'
+        },
+        {
+            id: 2,
+            name: 'teste',
+            login: 'teste',
+            senha: '123123'
+        }
+    ];
+
+    static authenticate(login, senha) {
+        console.log("Função authenticate chamada!")
+        console.log(login, senha)
+        const indice = UsuarioModel.lista.findIndex(item => item.login === login && item.senha === senha);
+        return UsuarioModel.lista[indice];
+    }
+
+}
+
+module.exports = UsuarioModel;
+UsuarioModel é uma classe que representa um modelo de usuário. Ela possui uma lista estática de usuários (static lista), que contém dois usuários fictícios (admin e teste).
+authenticate(login, senha): Um método estático que recebe login e senha como parâmetros e procura na lista de usuários se existe algum usuário com essas credenciais. Ele utiliza o findIndex para buscar um índice que atenda à condição.
+A função retorna o usuário encontrado ou undefined caso o login e a senha não sejam encontrados.
+Uso: Este modelo é utilizado para autenticação de usuários.
+
+2. AuthControllers.js
+javascript
+Copiar
+Editar
+const UsuarioModel = require("../models/UsuarioModel");
+
+class AuthControllers {
+    login(login, senha){
+        const dados = UsuarioModel.authenticate(login, senha)
+        return dados;
+    }
+}
+
+module.exports = AuthControllers;
+AuthControllers: Esta classe é responsável pelo controle da autenticação.
+login(login, senha): Este método recebe login e senha, chama o método authenticate do UsuarioModel e retorna os dados do usuário caso ele seja encontrado.
+A classe é exportada para ser utilizada em outros arquivos, como nas rotas de autenticação.
+Uso: A classe AuthControllers facilita a abstração da autenticação, centralizando a lógica no backend.
+
+3. RotasPublicas.js
+javascript
+Copiar
+Editar
+const express = require ('express');
+const jwt = require ('jsonwebtoken')
+const AuthControllers = require('../controllers/AuthControler');
+
+const RotasPublicas = express.Router()
+
+RotasPublicas.post('/login', (request, response) => {
+    const body = request.body;
+    const auth = new AuthControllers()
+    const dados = auth.login(body.login, body.senha)
+
+    if(dados) {
+        const token = jwt.sign(dados, '877yhygygtttr@433vu')
+        return response.json({
+            token: token
+        })
+    }
+
+    return response.json({
+        message: "Login ou senha incorreto"
+    })
+});
+
+module.exports = RotasPublicas;
+RotasPublicas: O arquivo define as rotas públicas da aplicação, neste caso a rota de login.
+/login: Quando a rota /login recebe uma requisição POST, ela pega os dados login e senha do corpo da requisição, usa o controlador AuthControllers para autenticar e, se os dados estiverem corretos, gera um token JWT (jwt.sign) e o retorna na resposta. Se os dados não forem encontrados, retorna uma mensagem de erro.
+O token é uma string codificada que pode ser usada para autenticação nas rotas privadas.
+Uso: A rota /login fornece a autenticação do usuário e gera um token JWT para autenticar futuras requisições.
+
+4. RotasPrivadas.js
+javascript
+Copiar
+Editar
+const express = require ('express')
+const jwt = require ('jsonwebtoken')
+const UsuariosRotas = require('./UsuariosRotas')
+const PostsRotas = require('./PostsRotas')
+
+const RotasPrivadas = express.Router()
+
+// Middleware
+RotasPrivadas.use((request, response, next) => {
+    let auth = false
+
+    if(request.headers.token) {
+        const { token } = request.headers;
+        try {
+            jwt.verify(token, '877yhygygtttr@433v')
+            auth = true;      
+        } catch (e) {
+            return response.status(403).send(e)
+        }
+    }
+
+    if(auth === false) {
+        return response.status(403).send("<h1>Não Autorizado</h1>")
+    }
+    next()
+})
+
+RotasPrivadas.use(UsuariosRotas)
+RotasPrivadas.use(PostsRotas)
+
+module.exports = RotasPrivadas;
+RotasPrivadas: O arquivo define as rotas privadas da aplicação.
+Middleware: Antes de processar as rotas, ele verifica se a requisição contém um token de autenticação no cabeçalho. Se o token estiver presente, o middleware tenta verificar sua validade usando o método jwt.verify. Se o token for inválido ou ausente, ele retorna um erro 403 (não autorizado).
+Se o token for válido, o controle é passado para as rotas de usuários (UsuariosRotas) e posts (PostsRotas), que são montadas na sequência.
+Uso: As rotas privadas só podem ser acessadas por usuários autenticados que fornecem um token JWT válido.
+
+5. Server.js
+javascript
+Copiar
+Editar
+const express = require("express");
+const RotasPrivadas = require("./rotas/RotasPrivadas");
+const RotasPublicas = require("./rotas/RotasPublicas");
+
+const host = 'localhost'
+const port = 3000
+
+const app = express()
+app.use(express.json())
+
+app.get('/', (request, response) => {
+    return response.send("Olá, eu sou um Backend com NodeJS + Express")
+});
+
+app.use(RotasPublicas)
+app.use(RotasPrivadas)
+
+app.put('/teste/:codigo', (request, response) => {
+    const query = request.query
+    let dados = "Query: " + query.nome + " - " + query.sobrenome;
+
+    const params = request.params;
+    dados += "<br > Params: " + params.codigo
+
+    const body = request.body;
+    dados += "<br /> " + JSON.stringify(body);
+
+    return response.send(dados)
+})
+
+app.listen (port, host, () => {
+    console.log(`Servidor executando em http://${host}:${port}`)
+})
+Server.js: O servidor express é configurado neste arquivo.
+Rotas Públicas e Privadas: As rotas públicas (RotasPublicas) e privadas (RotasPrivadas) são registradas usando app.use.
+app.put('/teste/:codigo'): Esta rota PUT recebe dados através de query parameters (request.query), parâmetros de URL (request.params), e corpo da requisição (request.body). Ele combina esses dados e os retorna na resposta.
+app.listen(): Inicia o servidor na porta 3000 e exibe uma mensagem no console para indicar que o servidor está rodando.
+Uso: O arquivo configura e inicia o servidor que gerencia as rotas públicas e privadas, e fornece uma resposta para a rota /teste.
+
+Resumo do fluxo:
+Login: O usuário faz login enviando login e senha para a rota /login.
+Geração do Token: Se os dados estiverem corretos, um token JWT é gerado e retornado.
+Acesso às Rotas Privadas: O token gerado deve ser passado no cabeçalho das requisições subsequentes para acessar as rotas privadas, como as de UsuariosRotas e PostsRotas.
+Middleware de Autenticação: O middleware verifica a validade do token antes de processar as requisições.
+Este fluxo permite que a aplicação controle o acesso de forma segura, utilizando JWT para autenticação.
